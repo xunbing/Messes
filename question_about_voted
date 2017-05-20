@@ -1,0 +1,23 @@
+while 1:
+    a = int(input())
+    lst = map(int,raw_input().split())
+    xd = lst[0]
+    beginxd = xd
+    lst = lst[1:]
+    if xd>max(lst):
+        print 0
+    elif xd == max(lst):
+        print 1
+    else:
+        lst = sorted(lst,reverse=True)
+        while 1:
+            if xd < lst[0]:
+                xd += 1
+                lst[0] -= 1
+                lst = sorted(lst, reverse=True)
+            elif xd == lst[0]:
+                print xd - beginxd + 1
+                break
+            else:
+                print xd - beginxd
+                break
