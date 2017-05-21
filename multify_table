@@ -1,0 +1,23 @@
+# 二分查找，简洁又迅速
+def findnum(x):
+    s = 0
+    for i in range(1, n + 1):
+        if x // i >= m:
+            s = s + m
+        else:
+            s = s + x // i
+    return s
+
+
+n, m, k = raw_input().split()
+n, m, k = map(int, [n, m, k])
+low = 1
+hight = n * m
+while hight >= low:
+    middle = (low + hight) // 2
+    par = findnum(middle)
+    if par < k:
+        low = middle + 1
+    else:
+        hight = middle - 1
+print low
