@@ -1,0 +1,124 @@
+# encoding :utf-8
+
+"""
+def lcs(k, l, slist, B):
+    if k == 0 or l == 0:
+        return
+    if B[k][l] == 1:
+        res.append(slist[k])
+        lcs(k - 1, l - 1, slist, B)
+    elif B[k][l] == 2:
+        lcs(k, l - 1, slist, B)
+    else:
+        lcs(k - 1, l, slist, B)
+
+
+def lcs2(k, l, sslist, B):
+    if k == 0 or l == 0:
+        return
+    if B[k][l] == 1:
+        res.append(sslist[k])
+        lcs2(k - 1, l - 1, sslist, B)
+    elif B[k][l] == 2:
+        lcs2(k, l - 1, sslist, B)
+    else:
+        lcs2(k - 1, l, sslist, B)
+
+while 1:
+    fo = 0
+    ba = 0
+    s = raw_input()
+    a = raw_input()
+    b = raw_input()
+    ss = s[::-1]
+    slist = list(s)
+    slist.insert(0, '0')
+    ablist = list(a + b)
+    ablist.insert(0, '0')
+    sslist = list(ss)
+    sslist.insert(0, '0')
+    C = [([0] * len(ablist)) for i in range(len(slist))]
+    B = [([0] * len(ablist)) for i in range(len(slist))]
+    CC = [([0] * len(ablist)) for i in range(len(sslist))]
+    BB = [([0] * len(ablist)) for i in range(len(sslist))]
+    # print C
+    # print slist
+    # print ablist
+    res = []
+    for i in range(1, len(slist)):
+        for j in range(1, len(ablist)):
+            if slist[i] == ablist[j]:
+                C[i][j] = C[i - 1][j - 1] + 1
+                B[i][j] = 1
+            elif C[i - 1][j] > C[i][j - 1]:
+                C[i][j] = C[i - 1][j]
+                B[i][j] = 3
+            else:
+                C[i][j] = C[i][j - 1]
+                B[i][j] = 2
+    lcs(len(slist) - 1, len(ablist) - 1, slist, B)
+    print ablist
+    print res
+    if res[::-1] == ablist[1:]:
+        fo = 1
+
+    res = []
+    for i in range(1, len(sslist)):
+        for j in range(1, len(ablist)):
+            if sslist[i] == ablist[j]:
+                CC[i][j] = CC[i - 1][j - 1] + 1
+                BB[i][j] = 1
+            elif CC[i - 1][j] > CC[i][j - 1]:
+                CC[i][j] = CC[i - 1][j]
+                BB[i][j] = 3
+            else:
+                CC[i][j] = CC[i][j - 1]
+                BB[i][j] = 2
+    lcs2(len(sslist) - 1, len(ablist) - 1, sslist, BB)
+    print res
+    if res[::-1] == ablist[1:]:
+        ba = 1
+
+    if fo == 1 and ba == 0:
+        print "forward"
+    elif fo == 0 and ba == 1:
+        print "backward"
+    elif fo == 1 and ba == 1:
+        print "both"
+    else:
+        print "invalid"
+"""
+
+while 1:
+    a = raw_input()
+    b = raw_input()
+    c = raw_input()
+    e = len(b)
+    if (b in a) & (c in a):
+        bl = a.find(b)
+        if bl + e <= len(a) - 1:
+            if a.find(c, bl + e) > 0:
+                res = 1
+            else:
+                res = 0
+        else:
+            res = 0
+    else:
+        res = 0
+
+    d = a[::-1]
+    if (b in d) & (c in d):
+        bl = d.find(b)
+        if bl + e <= len(a) - 1:
+            if d.find(c, bl + e) > 0:
+                res += 2
+            else:
+                res += 0
+        else:
+            res += 0
+    else:
+        res += 0
+    if res == 0: print'invalid'
+    if res == 1: print'forward'
+    if res == 2: print'backward'
+    if res == 3: print'both'
