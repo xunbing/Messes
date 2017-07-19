@@ -1,0 +1,49 @@
+
+#include "stdafx.h"
+#include <math.h>
+#include <iostream>
+#include <opencv2\opencv.hpp>
+using namespace cv;
+using namespace std;
+# pragma warning (disable:4819)
+double Pi = 3.14159265358979;
+int _tmain(int argc, _TCHAR* argv[])
+{
+	Mat img1 = Mat::zeros(500, 854, CV_8UC1);
+	Mat img2 = Mat::zeros(500, 854, CV_8UC1);
+	Mat img3 = Mat::zeros(500, 854, CV_8UC1);
+	char *name1 = new char[20];
+	char *name2 = new char[20];
+	char *name3 = new char[20];
+	for (int k = 1; k <= 5; k++)
+	{
+		for (int j = 0; j < 500; j++)
+		{
+			for (int i = 0; i < 854; i++)
+			{
+				double remainer1 = i % 11;
+				double remainer2 = i % 12;
+				double remainer3 = i % 13;
+				//double k1
+				int result1 = int((sin((2 * Pi / 11 * remainer1 + 2 * Pi*k / 5.0)) + 1) / 2.0 * 255 + 0.5f);
+				int result2 = int((sin((2 * Pi / 12 * remainer2 + 2 * Pi*k / 5.0)) + 1) / 2.0 * 255 + 0.5f);
+				int result3 = int((sin((2 * Pi / 13 * remainer3 + 2 * Pi*k / 5.0)) + 1) / 2.0 * 255 + 0.5f);
+
+				img1.at<uchar>(j, i) = result1;
+				img2.at<uchar>(j, i) = result2;
+				img3.at<uchar>(j, i) = result3;
+
+			}
+		}
+		sprintf(name1, "img/img1_%d.jpg", k);
+		sprintf(name2, "img/img2_%d.jpg", k);
+		sprintf(name3, "img/img3_%d.jpg", k);
+		imwrite(name1, img1);
+		imwrite(name2, img2);
+		imwrite(name3, img3);
+	}
+	
+	waitKey(0);
+	return 0;
+}
+
