@@ -1,0 +1,418 @@
+// AnotherGuyByDLL.cpp : 定义控制台应用程序的入口点。
+//
+
+#include "stdafx.h"
+#pragma  comment (lib,"wypPhase.lib")
+double PI = 3.1415926535897931;
+unsigned char *arrayofphase1[12];
+unsigned char *arrayofphase2[5];
+unsigned char *arrayofphase3[5];
+unsigned char *arrayofphase4[5];
+double **phasel;
+double **phaser;
+double **finalPhaseL;
+double **finalPhaseR;
+int find(char* lpPath, std::vector< std::string> &fileList);
+int remove_bg(int w, int h, bool *judge, Mat bg[], double **phase);
+int readData(char *path, unsigned char *Img[17], cv::Mat image[], int w, int h);
+int getWrappedPhase(int w, int step, unsigned char **arrayofphase, double *Phase, int size, int index);
+int getArrayphase(int k, int w, Mat Img[], unsigned char **Arrayofphase1, unsigned char **Arrayofphase2, unsigned char **Arrayofphase3, unsigned char **Arrayofphase4);
+
+int main()
+{
+	int w = 1024, h = 768;
+	int H = 768;
+	Mat show1 = Mat(h, w, CV_8UC1);
+	Mat show2 = Mat(h, w, CV_8UC1);
+	Mat s1 = Mat(h, w, CV_8UC1);
+	Mat s2 = Mat(h, w, CV_8UC1);
+	Mat s3 = Mat(h, w, CV_8UC1);
+	Mat s4 = Mat(h, w, CV_8UC1);
+	Mat show3 = Mat(h, w, CV_8UC3);
+	double *phase = new double[w*h];
+	unsigned char *imgr[29];
+	unsigned char *imgl[29];
+	for (int i = 0; i < 29; i++)
+	{
+		imgr[i] = new unsigned char[w*h];
+		imgl[i] = new unsigned char[w*h];
+	}
+	cv::Mat image[29];
+	cv::Mat Image[29];
+	cv::Mat imagel[29];
+	cv::Mat Imagel[29];
+	for (int i = 0; i < 12; i++)
+		arrayofphase1[i] = new unsigned char[w];
+	phasel = new double*[5];
+	phaser = new double*[5];
+
+	for (int i = 0; i < 5; i++)
+	{
+		arrayofphase2[i] = new unsigned char[w];
+		arrayofphase3[i] = new unsigned char[w];
+		arrayofphase4[i] = new unsigned char[w];
+		phasel[i] = new double[w*H];
+		phaser[i] = new double[w*H];
+	}
+	//相位初始化
+	wypPhaseInit(w, H, 0);
+	//生成条纹图
+	//createRaster(int w, int h);
+
+	//读取图片
+	readData("testImg1", imgl, imagel, w, h);
+	readData("testImg2", imgr, image, w, h);
+	//灰度化
+	for (int i = 0; i < 29; i++)
+	{
+		imgl[i] = imagel[i].data;
+		imgr[i] = image[i].data;
+		for (int j = 0; j < w*h; j++)
+		{
+			imgr[i][j] = (
+				image[i].data[3 * j + 2] * 299 +
+				image[i].data[3 * j + 1] * 587 +
+				image[i].data[3 * j + 0] * 114 +
+				500
+				) / 1000;
+			imgl[i][j] = (
+				imagel[i].data[3 * j + 2] * 299 +
+				imagel[i].data[3 * j + 1] * 587 +
+				imagel[i].data[3 * j + 0] * 114 +
+				500
+				) / 1000;
+		}
+		Image[i] = Mat(h, w, CV_8UC1, imgr[i]);
+		Imagel[i] = Mat(h, w, CV_8UC1, imgl[i]);
+	}
+	//开始计时
+	clock_t start = clock();
+	//计算包裹相位1024*768
+	for (int i = 0; i < h; ++i)
+	{
+		getArrayphase(i, w, Imagel, arrayofphase1, arrayofphase2, arrayofphase3, arrayofphase4);
+		getWrappedPhase(w, 12, arrayofphase1, phasel[0], w, i);
+		getWrappedPhase(w, 5, arrayofphase2, phasel[1], w, i);
+		getWrappedPhase(w, 5, arrayofphase3, phasel[2], w, i);
+		getWrappedPhase(w, 5, arrayofphase4, phasel[3], w, i);
+
+		getArrayphase(i, w, Image, arrayofphase1, arrayofphase2, arrayofphase3, arrayofphase4);
+		getWrappedPhase(w, 12, arrayofphase1, phaser[0], w, i);
+		getWrappedPhase(w, 5, arrayofphase2, phaser[1], w, i);
+		getWrappedPhase(w, 5, arrayofphase3, phaser[2], w, i);
+		getWrappedPhase(w, 5, arrayofphase4, phaser[3], w, i);
+	}
+
+	//解相位，结果保存在phasel[4]，phaser[4]
+	wypPhaseUnWrapped(phasel, phaser);
+	//结束计时
+	clock_t end = clock();
+	cout << "解相位耗时" << endl << end - start << "ms" << endl;
+	//黑白两帧差分，去除背景
+	Mat bg[2];
+	Mat bgl[2];
+	bg[0] = Image[27];
+	bg[1] = Image[28];
+	bgl[0] = Imagel[27];
+	bgl[1] = Imagel[28];
+	bool *judge = new bool[h*w];
+	remove_bg(w, h, judge, bg, phasel);
+	remove_bg(w, h, judge, bgl, phaser);
+	string filel = "D:\\program\\vc\\ConsoleApplication2\\ConsoleApplication2\\phaseL.txt";
+	string filer = "D:\\program\\vc\\ConsoleApplication2\\ConsoleApplication2\\phaseR.txt";
+	ofstream outl, outr;
+	outl.open(filel.c_str(), ofstream::out);
+	outr.open(filer.c_str(), ofstream::out);
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			outl << phasel[4][i*w + j] << endl;
+			outr << phaser[4][i*w + j] << endl;
+		}
+	}
+	//绘制效果图
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			s1.at<uchar>(i, j) = unsigned char(phaser[0][i*w + j] * 255);
+		}
+	}
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			s2.at<uchar>(i, j) = unsigned char(phaser[1][i*w + j] * 255);
+		}
+	}
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			s3.at<uchar>(i, j) = unsigned char(phasel[2][i*w + j] * 255);
+		}
+	}
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			s4.at<uchar>(i, j) = unsigned char(phasel[3][i*w + j] * 255);
+		}
+	}
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			show2.at<uchar>(i, j) = unsigned char(phaser[4][i*w + j]);
+		}
+	}
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			if (phasel[4][i*w + j + 1] > phasel[4][i*w + j])
+			{
+				show3.at<Vec3b>(i, j)[0] = 0;
+				show3.at<Vec3b>(i, j)[1] = 255;
+				show3.at<Vec3b>(i, j)[2] = 0;
+			}
+			else
+			{
+				show3.at<Vec3b>(i, j)[0] = 255;
+				show3.at<Vec3b>(i, j)[1] = 0;
+				show3.at<Vec3b>(i, j)[2] = 0;
+			}
+		}
+	}
+	//imshow("show1", show1);
+	imshow("show2", show2);
+	imshow("show3", show3);
+	imwrite("s1.bmp", s1);
+	imwrite("s2.bmp", s2);
+	imwrite("s3.bmp", s3);
+	imwrite("s4.bmp", s4);
+	imwrite("show2.bmp", show2);
+	imwrite("show3.bmp", show3);
+
+	waitKey(-1);
+	return 0;
+}
+int find(char* lpPath, std::vector< std::string> &fileList)
+{
+	char szFind[MAX_PATH];
+	WIN32_FIND_DATA FindFileData;
+
+	strcpy_s(szFind, lpPath);
+	strcat_s(szFind, "\\*.bmp");
+
+	WCHAR wszClassName[256];
+	memset(wszClassName, 0, sizeof(wszClassName));
+	MultiByteToWideChar(CP_ACP, 0, szFind, strlen(szFind) + 1, wszClassName,
+		int(sizeof(wszClassName)) / int(sizeof(wszClassName[0])));
+
+	HANDLE hFind = ::FindFirstFile(wszClassName, &FindFileData);
+	if (INVALID_HANDLE_VALUE == hFind)    return -1;
+
+	while (true)
+	{
+		if (FindFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+		{
+			if (FindFileData.cFileName[0] != '.')
+			{
+				char szFile[MAX_PATH];
+				strcpy_s(szFile, lpPath);
+				strcat_s(szFile, "\\");
+				strcat_s(szFile, (char*)(FindFileData.cFileName));
+				find(szFile, fileList);
+			}
+		}
+		else
+		{
+			//std::cout << FindFileData.cFileName << std::endl;  
+			int nLen = WideCharToMultiByte(CP_ACP, 0, FindFileData.cFileName, -1, NULL, 0, NULL, NULL);
+
+			char* pszDst = new char[nLen];
+
+			WideCharToMultiByte(CP_ACP, 0, FindFileData.cFileName, -1, pszDst, nLen, NULL, NULL);
+			pszDst[nLen - 1] = 0;
+
+			std::string strTemp(pszDst);
+			fileList.push_back(strTemp);
+		}
+		if (!FindNextFile(hFind, &FindFileData))    break;
+	}
+	FindClose(hFind);
+	return 1;
+}
+int readData(char *path, unsigned char *Img[17], cv::Mat image[], int w, int h)
+{
+	std::vector< std::string> fileList;
+	find(path, fileList);
+	for (int i = 0; i < fileList.size(); i++)
+	{
+		string F = path;
+		F = F.append("/");
+		std::string dir = F + fileList[i];
+		cv::Mat tmp_img = cv::imread(dir);
+
+		cv::resize(tmp_img, tmp_img, cv::Size(w, h));
+		//imshow("img", tmp_img);
+		//waitKey(400);
+		image[i] = tmp_img;
+		Img[i] = tmp_img.data;
+
+	}
+
+	return 1;
+}
+int getArrayphase(int k, int w, Mat Img[], unsigned char **Arrayofphase1, unsigned char **Arrayofphase2, unsigned char **Arrayofphase3, unsigned char **Arrayofphase4)
+{
+	for (int i = 0; i < 12; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			Arrayofphase1[i][j] = Img[i].at<uchar>(k, j);
+		}
+
+	}
+	for (int i = 12; i < 17; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			Arrayofphase2[i - 12][j] = Img[i].at<uchar>(k, j);
+		}
+	}
+	for (int i = 17; i < 22; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			Arrayofphase3[i - 17][j] = Img[i].at<uchar>(k, j);
+		}
+	}
+	for (int i = 22; i < 27; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			Arrayofphase4[i - 22][j] = Img[i].at<uchar>(k, j);
+		}
+	}
+	for (int i = 0; i < 27; i++)
+	{
+
+	}
+	return 0;
+}
+int getWrappedPhase(int w, int step, unsigned char **arrayofphase, double *Phase, int size, int index)
+{
+
+	double* sinValue = new double[step];
+	double* cosValue = new double[step];
+	double interMove = 2 * PI / step;
+
+	for (int k = 0; k < step; k++)
+	{
+		sinValue[k] = -1 * sin((k)*interMove);
+		cosValue[k] = cos((k)*interMove);
+	}
+
+	for (int i = 0; i < size; i++)
+	{
+		double deltax = 0;
+		double deltay = 0;
+
+		for (int k = 0; k < step; k++)
+		{
+			deltay += (arrayofphase[k][i])*sinValue[k];
+			deltax += (arrayofphase[k][i])*cosValue[k];
+		}
+		{
+			if (deltax == 0 && deltay >= 0)
+				Phase[index*w + i] = PI / 2;
+			else if (deltax == 0 && deltay < 0)
+				Phase[index*w + i] = -PI / 2;
+			else
+				Phase[index*w + i] = atan2(deltay, deltax);
+
+			Phase[index*w + i] = (Phase[index*w + i] + PI) / (2 * PI);
+		}
+	}
+
+	delete[]sinValue;
+	delete[]cosValue;
+	return 0;
+}
+int remove_bg(int w, int h, bool *judge, Mat bg[], double **Phase)
+{
+	//黑白相减
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			if (bg[1].at<uchar>(i, j) - bg[0].at<uchar>(i, j) > 5)
+				bg[1].at<uchar>(i, j) = bg[1].at<uchar>(i, j) - bg[0].at<uchar>(i, j);
+			else
+				bg[1].at<uchar>(i, j) = 0;
+		}
+	}
+	//中值滤波减少椒盐噪声
+	cv::medianBlur(bg[1], bg[1], 3);
+	cv::Mat bg_copy1 = bg[1].clone();
+	//cv::imshow("bg1", bg_copy1);
+	//cvWaitKey(0);
+	//二值化
+	cv::threshold(bg_copy1, bg_copy1, 0, 255, CV_THRESH_BINARY);
+	//imshow("bgcopy1", bg_copy1);
+	//imshow("bgcopy2", bg_copy2);
+	//waitKey(-1);
+	for (int i = 1; i < h - 1; i++)
+	{
+		for (int j = 1; j < w - 1; j++)
+		{
+			int weightL = 0;
+			if (bg_copy1.at<uchar>(i, j) == 255)
+			{
+				//八连通区域检测
+				if (bg_copy1.at<uchar>(i, j - 1) == 0)
+					weightL++;
+				if (bg_copy1.at<uchar>(i, j + 1) == 0)
+					weightL++;
+				if (bg_copy1.at<uchar>(i - 1, j) == 0)
+					weightL++;
+				if (bg_copy1.at<uchar>(i + 1, j) == 0)
+					weightL++;
+				if (bg_copy1.at<uchar>(i - 1, j - 1) == 0)
+					weightL++;
+				if (bg_copy1.at<uchar>(i + 1, j - 1) == 0)
+					weightL++;
+				if (bg_copy1.at<uchar>(i - 1, j + 1) == 0)
+					weightL++;
+				if (bg_copy1.at<uchar>(i + 1, j + 1) == 0)
+					weightL++;
+				if (weightL <= 3)
+					judge[i*w + j] = TRUE;
+				else
+					judge[i*w + j] = FALSE;
+			}
+			else
+			{
+				judge[i*w + j] = FALSE;
+				//bg[1].at<uchar>(i, j) = 0;
+			}
+		}
+	}
+	//cv::imshow("bg1", bg_copy1);
+	//cvWaitKey(0);
+
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			if (judge[i*w + j] == 0)
+			{
+				Phase[4][i*w + j] = 0;
+			}
+		}
+	}
+	return 0;
+}
