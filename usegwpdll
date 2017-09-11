@@ -1,0 +1,330 @@
+// Demo0831.cpp : 定义控制台应用程序的入口点。
+//
+
+#include "stdafx.h"
+#include<iostream>
+#include <Windows.h>
+#include <time.h>
+#include <opencv2\opencv.hpp>
+//#include "getUnWrapPhaseDLL0908.h"
+//#pragma  comment (lib,"getUnWrapPhaseDLL0908.lib")
+#include "getUnWrapedPhaseDLL.h"
+#pragma  comment (lib,"getUnWrapedPhaseDLL.lib")
+//#include "getUnWrapPhaseDLL0909.h"
+//#pragma  comment (lib,"getUnWrapPhaseDLL0909.lib")
+#include "extern.h"
+#include "fbScanner.h"
+
+#pragma  comment (lib,"waqGeneral.lib")
+#pragma  comment (lib,"waqHardware.lib")
+using namespace std;
+using namespace cv;
+int find(char* lpPath, std::vector< std::string> &fileList);
+int saveResult(double *Phase, int w, int h);
+int writemyphase(int w, int h, double *phasel, double* phaser);
+int readData(char *filepath, unsigned char *imgr[17], cv::Mat image[], int w, int h);
+int readOthersPhase(int w, int h, char *phaPathl, char *phaPathr, double *Phasel, double *Phaser);
+int _tmain(int argc, _TCHAR* argv[])
+{
+	int w = 1024;
+	int h = 768;
+	int flag = 0;
+	//初始化
+	Init(w,h,5);
+	//测试生成光栅函数
+	//unsigned char*tmpdata = new unsigned char[854];
+	//unsigned char**data = new unsigned char*[17];
+	//for (int i = 0; i < 17; i++)
+	//{
+	//	data[i] = new unsigned char[854*480];
+	//}
+	//for (int i = 0; i < 17;i++)
+	//{
+	//	createProjImg(i+1, tmpdata);
+	//	for (int j = 0; j < 480; j++)
+	//	{
+	//		for (int k = 0; k < 854; k++)
+	//		{
+	//			data[i][j*854 + k] = tmpdata[k];
+	//		}
+	//	}
+	//}
+	//char *name = new char[50];
+	//for (int i = 0; i < 17; i++)
+	//{
+	//	Mat show = Mat(480, 854, CV_8UC1, data[i]);
+	//	sprintf(name, "img/%dimg.bmp", i);
+	//	imwrite(name, show);
+	//}
+	//
+	
+	std::cout << "输入1：使用my phase" << endl << "输入2：使用his phase" << endl;
+	cin >> flag;
+	double *phasel = new double[w*h];
+	double *phaser = new double[w*h];
+	unsigned char *imgl[17];
+	unsigned char *imgr[17];
+	for (int i = 0; i < 17; i++)
+	{
+		imgl[i] = new unsigned char[w*h];
+		imgr[i] = new unsigned char[w*h];
+	}
+	if (flag == 1)
+	{
+
+		
+		cv::Mat imagel[17];
+		cv::Mat imager[17];
+		std::cout << "正在读取图片..." << std::endl;
+		//读取图片
+		char *path1 = "testImg1";
+		char *path2 = "testImg2";
+		readData(path1, imgl, imagel, w, h);
+		readData(path2, imgr, imager, w, h);
+
+		for (int i = 0; i < 17; i++)
+		{
+			imgl[i] = imagel[i].data;
+			imgr[i] = imager[i].data;
+		}
+		//灰度化
+		std::cout << "正在灰度化..." << std::endl;
+		for (int i = 0; i < 17; i++)
+		{
+			for (int j = 0; j < w*h; j++)
+			{
+				imgl[i][j] = (
+					imgl[i][3 * j + 2] * 299 +
+					imgl[i][3 * j + 1] * 587 +
+					imgl[i][3 * j + 0] * 114 +
+					500
+					) / 1000;
+				imgr[i][j] = (
+					imgr[i][3 * j + 2] * 299 +
+					imgr[i][3 * j + 1] * 587 +
+					imgr[i][3 * j + 0] * 114 +
+					500
+					) / 1000;
+			}
+		}
+
+		//计时开始
+		clock_t start = clock();
+		int time1 = 0, time2 = 0, time3 = 0;
+		//解相位
+		cout << "开始进入循环";
+		int s;
+		cin >> s;
+		/*while (1)*/
+		{
+			phaseResult(imgl, phasel);
+			phaseResult(imgr, phaser);
+		}
+		//计时结束
+		clock_t end = clock(); time1 = end - start; std::cout << "解相位耗时   "  << end - start << "ms" << std::endl;
+		//计时开始
+		start = clock();
+		//去除背景
+		removeBg(imgl[15], imgl[16], phasel);
+		removeBg(imgr[15], imgr[16], phaser);
+		//计时结束
+		end = clock(); time3 = end - start; std::cout << "去除背景耗时   " << end - start << "ms" << std::endl;
+		//计时开始
+		start = clock();
+		//相位滤波
+		phaseflitter(phasel);
+		phaseflitter(phaser);
+		//计时结束
+		end = clock(); time2 = end - start; std::cout << "相位滤波耗时   "  << end - start << "ms" << std::endl;
+		std::cout << "解相位+滤波+去背景 总耗时   "  << time1+time2+time3 << "ms" << std::endl<<std::endl;
+	
+	}
+	
+
+	if (flag == 2)
+	{
+		readOthersPhase(w, h, "phaseL.txt", "phaseR.txt", phasel, phaser);
+	}
+
+	//记录相位
+	//writemyphase(w, h, phasel, phaser);
+	///相位滤波
+	fbPhaseFilter(phasel, 0.04, 50);
+	fbPhaseFilter(phaser, 0.04, 50);
+
+	///生成点云
+	//初始化
+	fbInit("CamCCF.txt", "ProjCCF.txt", w, h);
+	cout << "hello_init" << endl;
+	double *x = new double[w*h];
+	double *y = new double[w*h];
+	double *z = new double[w*h];
+
+	double *nx = new double[w*h];
+	double *ny = new double[w*h];
+	double *nz = new double[w*h];
+	//计算点云
+	fbPointCloud(phasel, phaser, x, y, z, nx, ny, nz);
+	fbPointCloudFilter(x, y, z, nx, ny, nz, 0.1, 50);
+	cout << "hello_cloud" << endl;
+	//保存点云
+	fbSaveData("cloud.txt", w*h, x, y, z, nx, ny, nz);
+	cout << "hello_save" << endl;
+
+	//保存结果
+	saveResult(phasel, w, h);
+	delete[]phaser;
+	delete[]phasel;
+	delete[]x;
+	delete[]y;
+	delete[]z;
+	delete[]nx;
+	delete[]ny;
+	delete[]nz;
+	
+	delete[]imgl;
+	delete[]imgr;
+
+
+
+	return 0;
+}
+int readData(char *filepath, unsigned char *imgr[17], cv::Mat image[], int w, int h)
+{
+	std::vector< std::string> fileList;
+	find(filepath, fileList);
+	for (int i = 0; i < fileList.size(); i++)
+	{
+		std::string F = filepath;
+		F.append("/");
+		std::string dir = F + fileList[i];
+		cv::Mat tmp_img = cv::imread(dir);
+		cv::resize(tmp_img, tmp_img, cv::Size(w, h));
+		//imshow("imgr", tmp_img);
+		//cv::waitKey(500);
+		image[i] = tmp_img;
+	}
+	return 0;
+}
+int readOthersPhase(int w, int h, char *phaPathl, char *phaPathr, double *Phasel, double *Phaser)
+{
+	phaPathl = "phaseL.txt";
+	phaPathr = "phaseR.txt";
+	char bufferl[100];
+	char bufferr[100];
+	std::ifstream inl(phaPathl);
+	std::ifstream inr(phaPathr);
+	if (!inl.is_open() && !inr.is_open())
+	{
+		std::cout << "Error opening file"; exit(1);
+	}
+	int count = 0;
+	while (!inl.eof() && !inr.eof())
+	{
+		inl.getline(bufferl, 100);
+		inr.getline(bufferr, 100);
+		volatile double resultl = atof(bufferl);
+		volatile double resultr = atof(bufferr);
+		Phasel[count] = resultl;
+		Phaser[count] = resultr;
+		//std::cout << col << std::endl;
+		//std::cout << distance[row][col] << std::endl;
+		++count;
+	}
+	return 0;
+}
+int saveResult(double *Phase, int w, int h)
+{
+	cv::Mat gray = cv::Mat::zeros(h, w, CV_8UC1);
+	cv::Mat exam = cv::Mat::zeros(h, w, CV_8UC3);
+	for (int i = 0; i < h; ++i)
+	{
+		for (int j = 0; j < w - 1; j++)
+		{
+			gray.at<uchar>(i, j) = unsigned char((Phase[i*w+j] + 3.1415926) / (132 * 2 * 3.1415926) * 24 * 255);
+			if (Phase[i*w + j] < Phase[i*w + j + 1])
+			{
+				exam.at<cv::Vec3b>(i, j)[0] = 0;
+				exam.at<cv::Vec3b>(i, j)[1] = 255;
+				exam.at<cv::Vec3b>(i, j)[2] = 0;
+			}
+			else
+			{
+				exam.at<cv::Vec3b>(i, j)[0] = 255;
+				exam.at<cv::Vec3b>(i, j)[1] = 0;
+				exam.at<cv::Vec3b>(i, j)[2] = 0;
+			}
+		}
+	}
+	//imshow("gray", gray);
+	//imshow("exam", exam);
+	imwrite("gray.bmp", gray);
+	imwrite("exam.bmp", exam);
+	cv::waitKey(0);
+	return 0;
+}
+int find(char* lpPath, std::vector< std::string> &fileList)
+{
+	char szFind[MAX_PATH];
+	WIN32_FIND_DATA FindFileData;
+
+	strcpy_s(szFind, lpPath);
+	strcat_s(szFind, "\\*.bmp");
+
+	WCHAR wszClassName[256];
+	memset(wszClassName, 0, sizeof(wszClassName));
+	MultiByteToWideChar(CP_ACP, 0, szFind, strlen(szFind) + 1, wszClassName,
+		int(sizeof(wszClassName)) / int(sizeof(wszClassName[0])));
+
+	HANDLE hFind = ::FindFirstFile(wszClassName, &FindFileData);
+	if (INVALID_HANDLE_VALUE == hFind)    return -1;
+
+	while (true)
+	{
+		if (FindFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+		{
+			if (FindFileData.cFileName[0] != '.')
+			{
+				char szFile[MAX_PATH];
+				strcpy_s(szFile, lpPath);
+				strcat_s(szFile, "\\");
+				strcat_s(szFile, (char*)(FindFileData.cFileName));
+				find(szFile, fileList);
+			}
+		}
+		else
+		{
+			//std::cout << FindFileData.cFileName << std::endl;  
+			int nLen = WideCharToMultiByte(CP_ACP, 0, FindFileData.cFileName, -1, NULL, 0, NULL, NULL);
+
+			char* pszDst = new char[nLen];
+
+			WideCharToMultiByte(CP_ACP, 0, FindFileData.cFileName, -1, pszDst, nLen, NULL, NULL);
+			pszDst[nLen - 1] = 0;
+
+			std::string strTemp(pszDst);
+			fileList.push_back(strTemp);
+		}
+		if (!FindNextFile(hFind, &FindFileData))    break;
+	}
+	FindClose(hFind);
+	return 1;
+}
+int writemyphase(int w, int h, double *phasel, double *phaser)
+{
+	string filel = "myphase/phaseL.txt";
+	string filer = "myphase/phaseR.txt";
+	ofstream outl, outr;
+	outl.open(filel.c_str(), ofstream::out);
+	outr.open(filer.c_str(), ofstream::out);
+	for (int i = 0; i < h; i++)
+	{
+		for (int j = 0; j < w; j++)
+		{
+			outl << phasel[i*w + j] << " ";
+			outr << phaser[i*w + j] << " ";
+		}
+		outl << endl;
+		outr << endl;
+	}
+}
