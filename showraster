@@ -1,0 +1,374 @@
+// showRaster.cpp : 定义控制台应用程序的入口点。
+//
+
+#include "stdafx.h"
+#include <opencv2\opencv.hpp>
+#include <Windows.h>
+#include <fbScanner.h>
+#include <iostream>
+#include <fstream>
+#define WIDTH 2048
+#define HEIGHT 1536
+using namespace std;
+using namespace cv;
+bool judgeL[HEIGHT][WIDTH];
+bool judgeR[HEIGHT][WIDTH];
+Mat img[30];
+Mat bg[4];
+std::vector<const std::string> fileList;
+std::vector<const std::string> fileList2;
+vector<Point> front[2];
+void find(char* lpPath, std::vector<const std::string> &fileList);
+void get_real_pic(std::vector<const std::string>);
+void get_real_pic2(std::vector<const std::string>);
+void getDistortedPic(); //获取待标定图片
+void remove_bg();
+unsigned char * rgbL = 0;
+unsigned char * rgbR = 0;
+Mat tmpL = Mat::zeros(HEIGHT, WIDTH, CV_8UC3);
+Mat tmpR = Mat::zeros(HEIGHT, WIDTH, CV_8UC3);
+
+int _tmain(int argc, _TCHAR* argv[])
+{
+	int choose = 0;
+	while (1)
+	{
+		cout << "输入1：获取原方法光栅" << endl;
+		cout << "输入2：获取现方法光栅" << endl;
+		cout << "输入3：进行初步背景去除" << endl;
+		cout << "输入4：拍摄待标定图片" << endl;
+		cout << "输入5：获取原和现光栅" << endl;
+		cin >> choose;
+		switch (choose)
+		{
+		case 1:
+		{	
+			get_real_pic(fileList);
+			waqCameraClose();
+			break;
+		}
+
+		case 2:
+			get_real_pic2(fileList);
+			break;
+		case 3:
+			remove_bg();
+			break;
+		case 4:
+			getDistortedPic();
+			break;
+		case 5:
+		{
+			get_real_pic(fileList);
+			get_real_pic2(fileList);
+			break;
+		}
+		default:
+			break;
+		}
+	}
+	//get_bg_pic(rgbL, rgbR);
+	//get_real_pic(fileList);
+	//remove_bg();
+	return 0;
+}
+void remove_bg()
+{
+	find("bg", fileList);
+	//bg[0 2]是打黑光，bg[1 3]是打白光
+	for (int i = 0; i < fileList.size(); i++)
+	{
+		string dir = "bg/" + fileList[i];
+		Mat tmp_img = imread(dir);
+		cvtColor(tmp_img, tmp_img, CV_BGR2GRAY);
+		bg[i] = tmp_img;
+	}
+	//黑白相减
+	for (int i = 0; i < HEIGHT; i++)
+	{
+		for (int j = 0; j < WIDTH; j++)
+		{
+			if (bg[1].at<uchar>(i, j) - bg[0].at<uchar>(i, j)>5)
+				bg[1].at<uchar>(i, j) = bg[1].at<uchar>(i, j) - bg[0].at<uchar>(i, j);
+			else
+				bg[1].at<uchar>(i, j) = 0;
+		}
+	}
+	for (int i = 0; i < HEIGHT; i++)
+	{
+		for (int j = 0; j < WIDTH; j++)
+		{
+			if (bg[3].at<uchar>(i, j) - bg[2].at<uchar>(i, j)>5)
+				bg[3].at<uchar>(i, j) = bg[3].at<uchar>(i, j) - bg[2].at<uchar>(i, j);
+			else
+				bg[3].at<uchar>(i, j) = 0;
+		}
+	}
+
+	string filename = "f.txt";
+	ofstream outf;
+	outf.open(filename.c_str(), ofstream::out);
+	outf.close();
+	//演示用
+	Mat bg_copy1 = bg[1].clone();
+	Mat bg_copy2 = bg[3].clone();
+	//二值化
+	threshold(bg_copy1, bg_copy1, 0, 255, CV_THRESH_BINARY);
+	threshold(bg_copy2, bg_copy2, 0, 255, CV_THRESH_BINARY);
+	//imshow("bgcopy1", bg_copy1);
+	//imshow("bgcopy2", bg_copy2);
+	//waitKey(-1);
+	for (int i = 0; i < HEIGHT; i++)
+	{
+		for (int j = 0; j < WIDTH; j++)
+		{
+			if (bg_copy1.at<uchar>(i, j) == 255)
+			{
+				judgeL[i][j] = TRUE;
+
+			}
+			else
+			{
+				judgeL[i][j] = FALSE;
+				//bg[1].at<uchar>(i, j) = 0;
+			}
+
+			if (bg_copy2.at<uchar>(i, j) == 255)
+				judgeR[i][j] = TRUE;
+			else
+			{
+				judgeR[i][j] = FALSE;
+				//bg[3].at<uchar>(i, j) = 0;
+			}
+		}
+	}
+	Mat tmp[15];
+	char *name1 = new char[50];
+	find("p/right", fileList2);
+	for (int i = 0; i < fileList2.size(); i++)
+	{
+		string dir = "p/right/" + fileList2[i];
+		Mat tmp_img = imread(dir);
+		//cvtColor(tmp_img, tmp_img, CV_BGR2GRAY);
+		tmp[i] = tmp_img;
+	}
+	for (int p = 0; p < 15; p++)
+	{
+		for (int i = 0; i < HEIGHT; i++)
+		{
+			for (int j = 0; j < WIDTH; j++)
+			{
+				if (!judgeR[i][j] && !judgeR[i - 1][j - 1] && !judgeR[i - 1][j + 1] && !judgeR[i + 1][j - 1] && !judgeR[i + 1][j + 1] && !judgeR[i][j - 1] && !judgeR[i][j + 1] && !judgeR[i - 1][j] && !judgeR[i + 1][j])
+				{
+					for (int c = 0; c < 3; c++)
+					{
+						tmp[p].at<Vec3b>(i, j)[c] = 0;
+					}
+				}
+
+			}
+		}
+		sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\pp\\%ximg1_right.bmp", p + 1);
+		imwrite(name1, tmp[p]);
+	}
+
+
+	//保存背景
+	imwrite("bg_left.bmp", bg[1]);
+	imwrite("bg_right.bmp", bg[3]);
+
+	waitKey(0);
+
+}
+void get_real_pic(vector<const std::string>fileList)
+{
+	int bao = 0;
+	cout << "请选择曝光程度 0  1  3  5  7  9" << endl;
+	cin >> bao;
+	waqCameraOpen(0, 0);
+	find("img", fileList);
+	char *name1 = new char[50];
+	char *name2 = new char[50];
+	for (int i = 0; i < fileList.size(); i++)
+	{
+		cout << fileList.size() << endl;
+		string dir = "img/" + fileList[i];
+		cout << dir << endl;
+		Mat tmp_img = imread(dir, IMREAD_GRAYSCALE);
+		img[i] = tmp_img;
+		char* wndname = "img1";
+		namedWindow(wndname, CV_WINDOW_AUTOSIZE);
+		setWindowProperty(wndname, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
+		moveWindow(wndname, 1920, 0);
+		imshow(wndname, img[i]);
+		waitKey(200);
+		fbCameraSet(bao * 10000, bao * 10000);
+		waqCameraOnce(0, 0, rgbL, rgbR);//拍照
+		waitKey(100);
+		tmpL = Mat(HEIGHT, WIDTH, CV_8UC3, rgbL);
+		tmpR = Mat(HEIGHT, WIDTH, CV_8UC3, rgbR);
+
+		if (i < 12)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg1\\a%ximg_left.bmp", i + 1);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg2\\a%ximg_right.bmp", i + 1);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+		else if (i >= 12 && i < 17)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg1\\b%ximg_left.bmp", i + 1 - 12);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg2\\b%ximg_right.bmp", i + 1 - 12);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+		else if (i >= 17 && i < 22)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg1\\c%ximg_left.bmp", i + 1 - 17);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg2\\c%ximg_right.bmp", i + 1 - 17);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+		else if (i >= 22 && i < 27)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg1\\d%ximg_left.bmp", i + 1 - 22);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg2\\d%ximg_right.bmp", i + 1 - 22);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+		else if (i >= 27 && i < 29)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg1\\e%ximg_left.bmp", i + 1 - 27);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\pp\\testImg2\\e%ximg_right.bmp", i + 1 - 27);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+
+
+	}
+
+}
+void get_real_pic2(vector<const std::string>fileList)
+{
+	int bao = 0;
+	cout << "请选择曝光程度 0  1  3  5  7  9" << endl;
+	cin >> bao;
+	waqCameraOpen(0, 0);
+	find("img1", fileList);
+	char *name1 = new char[50];
+	char *name2 = new char[50];
+	for (int i = 0; i < fileList.size(); i++)
+	{
+		cout << fileList.size() << endl;
+		string dir = "img1/" + fileList[i];
+		cout << dir << endl;
+		Mat tmp_img = imread(dir, IMREAD_GRAYSCALE);
+		img[i] = tmp_img;
+		char* wndname = "img1";
+		namedWindow(wndname, CV_WINDOW_AUTOSIZE);
+		setWindowProperty(wndname, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
+		moveWindow(wndname, 1920, 0);
+		imshow(wndname, img[i]);
+		waitKey(200);
+		fbCameraSet(bao * 10000, bao * 10000);
+		waqCameraOnce(0, 0, rgbL, rgbR);//拍照
+		waitKey(100);
+		tmpL = Mat(HEIGHT, WIDTH, CV_8UC3, rgbL);
+		tmpR = Mat(HEIGHT, WIDTH, CV_8UC3, rgbR);
+
+		if (i < 12)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg1\\a%ximg_left.bmp", i + 1);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg2\\a%ximg_right.bmp", i + 1);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+		else if (i >= 12 && i < 17)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg1\\b%ximg_left.bmp", i + 1 - 12);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg2\\b%ximg_right.bmp", i + 1 - 12);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+		else if (i >= 17 && i < 22)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg1\\c%ximg_left.bmp", i + 1 - 17);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg2\\c%ximg_right.bmp", i + 1 - 17);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+		else if (i >= 22 && i < 27)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg1\\d%ximg_left.bmp", i + 1 - 22);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg2\\d%ximg_right.bmp", i + 1 - 22);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+		else if (i >= 27 && i < 29)
+		{
+			sprintf(name1, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg1\\e%ximg_left.bmp", i + 1 - 27);
+			sprintf(name2, "D:\\program\\vc\\showRaster\\showRaster\\p\\testImg2\\e%ximg_right.bmp", i + 1 - 27);
+			imwrite(name1, tmpL);
+			imwrite(name2, tmpR);
+		}
+
+
+	}
+	waqCameraClose();
+}
+void getDistortedPic()
+{
+	char *name = new char[50];
+	char *wndname = "white";
+	Mat white = imread("white.bmp");
+	waqCameraOpen(0, 0);
+	int i = 1;
+	while (1)
+	{
+		namedWindow(wndname, CV_WINDOW_AUTOSIZE);
+		setWindowProperty(wndname, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
+		moveWindow(wndname, 1920, 0);
+		imshow(wndname, white);
+		waitKey(5000);
+		waqCameraOnce(0, 0, rgbL, rgbR);//拍照
+		tmpR = Mat(HEIGHT, WIDTH, CV_8UC3, rgbR);
+		//resize(tmpR, tmpR, Size(256, 359));
+		sprintf(name, "D:\\program\\vc\\showRaster\\showRaster\\distoredPic\\%x.bmp", i);
+		i++;
+		imwrite(name, tmpR);
+	}
+
+}
+void find(char* lpPath, std::vector<const std::string> &fileList)
+{
+	char szFind[MAX_PATH];
+	WIN32_FIND_DATA FindFileData;
+
+	strcpy(szFind, lpPath);
+	strcat(szFind, "\\*.bmp");
+
+	HANDLE hFind = ::FindFirstFile(szFind, &FindFileData);
+	if (INVALID_HANDLE_VALUE == hFind)    return;
+
+	while (true)
+	{
+		if (FindFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+		{
+			if (FindFileData.cFileName[0] != '.')
+			{
+				char szFile[MAX_PATH];
+				strcpy(szFile, lpPath);
+				strcat(szFile, "\\");
+				strcat(szFile, (char*)(FindFileData.cFileName));
+				find(szFile, fileList);
+			}
+		}
+		else
+		{
+			//std::cout << FindFileData.cFileName << std::endl;  
+			fileList.push_back(FindFileData.cFileName);
+		}
+		if (!FindNextFile(hFind, &FindFileData))    break;
+	}
+	FindClose(hFind);
+}
