@@ -1,0 +1,18 @@
+# coding:utf-8
+import os
+
+name = os.listdir('E:/data')
+i = 0
+nname = []
+nnname =''
+for temp in name:
+    new_name = temp
+    nnname = temp
+    if len(new_name)==7:
+        print new_name[1]
+        nname = list(new_name)
+        nname[1] = 'a'
+        nnname = ''.join(nname)
+        # new_name[1] = 'a'
+
+    os.rename('E:/data/' + temp, 'E:/data/' + nnname)
