@@ -1,0 +1,126 @@
+ORG 0000H
+LJMP MAIN1
+ORG 0030H
+MAIN1:
+	MOV DPTR, #0FF2BH	;初始化8255（1）用于输出加电码
+   	MOV A,#91H			;A口输入 B口输出 C口高四位输出低四位输入
+	MOVX @DPTR,A
+	MOV R2,#00H
+	MOV R3,#08H
+
+	
+;逆时针快转
+MAIN:
+	MOV DPTR,#0FF90H
+	MOVX @DPTR, A			;启动ADC0809模数转换
+	LCALL DELAY2
+	CLR A				   	
+	MOV DPTR,#0FF90H		;读取数据
+	MOVX A,@DPTR
+	MOV B,#09H
+	MUL AB					;通过乘法指令对数字信号进行尺度放大
+	CLR C
+	SUBB A,#0DDH
+	JC J6
+
+	CLR P1.4				;压力大于预支，绿灯亮
+	SETB P1.3				;红灯灭
+	;=================================;
+	MOV A,P1
+	ANL A,#07H
+	CJNE A,#07H,J3
+	
+	MOV A,R2
+
+	MOV DPTR,#TABLE2		;取加电码
+	MOVC A,@A+DPTR
+	INC R2
+	
+	
+	MOV DPTR,#0FF29H		;循环从8255B口输出加电码
+	MOVX @DPTR,A
+	MOV A,R3
+	DEC R3
+	JZ J2
+	LCALL DELAY2
+	LJMP MAIN
+;计数器复位	
+J2:
+	MOV R2,#00H
+	MOV R3,#08H
+	LJMP MAIN
+;顺时针慢转
+J3:
+	CJNE A,#04H,J4
+
+	MOV A,R2
+
+	MOV DPTR,#TABLE
+	MOVC A,@A+DPTR
+	INC R2
+	
+	MOV DPTR,#0FF29H
+	MOVX @DPTR,A
+	MOV A,R3
+	DEC R3
+	JZ J2
+	LCALL DELAY1
+	LJMP MAIN
+;逆时针慢转
+J4:
+	CJNE A,#05H,J5
+	
+	MOV A,R2
+
+	MOV DPTR,#TABLE2
+	MOVC A,@A+DPTR
+	INC R2
+	
+	MOV DPTR,#0FF29H
+	MOVX @DPTR,A
+	MOV A,R3
+	DEC R3
+	JZ J2
+	LCALL DELAY1
+	LJMP MAIN
+;顺时针快转
+J5:
+	CJNE A,#06H,J6
+	
+	MOV A,R2
+
+	MOV DPTR,#TABLE
+	MOVC A,@A+DPTR
+	INC R2
+	
+	MOV DPTR,#0FF29H
+	MOVX @DPTR,A
+	MOV A,R3
+	DEC R3
+	JZ J2
+	LCALL DELAY2
+	LJMP MAIN
+;指示灯
+J6:
+	SETB P1.4
+	CLR P1.3;
+	LJMP MAIN
+;延时函数1,负责控制慢转
+DELAY1:MOV 	R0,#100
+D1:	MOV 	R1,#150
+	DJNZ 	R1,$
+	DJNZ	R0,D1
+	RET
+;延时函数2，负责控制快转
+DELAY2:MOV 	R4,#10
+D2:	MOV 	R5,#40
+	DJNZ 	R5,$
+	DJNZ	R4,D2
+	RET
+;四相八节拍数组正转	
+TABLE:
+ DB 03H,07H,06H,0EH,0CH,0DH,09H,0BH
+;反转
+TABLE2:
+ DB 0BH,09H,0DH,0CH,0EH,06H,07H,03H
+END
